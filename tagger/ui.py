@@ -10,6 +10,8 @@ from PIL import Image, UnidentifiedImageError
 from webui import wrap_gradio_gpu_call
 from modules import ui
 from modules import generation_parameters_copypaste as parameters_copypaste
+from modules import api, shared
+import requests
 
 from tagger import format, utils
 from tagger.utils import split_str
@@ -51,7 +53,8 @@ def on_interrogate(
     if interrogator not in utils.interrogators:
         return ['', None, None, f"'{interrogator}' is not a valid interrogator"]
 
-    interrogator: Interrogator = utils.interrogators[interrogator]
+    if not shared.cmd_opts.just_ui:
+        interrogator: Interrogator = utils.interrogators[interrogator]
 
     postprocess_opts = (
         threshold,
@@ -66,13 +69,41 @@ def on_interrogate(
 
     # single process
     if image is not None:
-        ratings, tags = interrogator.interrogate(image)
+        if shared.cmd_opts.just_ui:
+            req = {}
+            req["image"] = api.api.encode_pil_to_base64(image).decode('utf-8')
+            req["model"] = interrogator
+            req["threshold"] = threshold
+            url = '/'.join([shared.cmd_opts.server_path, 'tagger/v1/interrogate'])
+            try:
+                result = requests.post(url, json=req)
+            except Exception as e:
+                print(f'request server {url} failed with exception {e}', flush=True)
+                return [
+                    '',
+                    {},
+                    '',
+                    ''
+                ]
+            if result.status_code!=200:
+                print(f'request server {url} failed with exception {result.text}', flush=True)
+                return [
+                    '',
+                    {},
+                    '',
+                    ''
+                ]
+            tags = json.loads(result.text)['caption']
+            ratings = {}
+
+        else:
+            ratings, tags = interrogator.interrogate(image)
         processed_tags = Interrogator.postprocess_tags(
             tags,
             *postprocess_opts
         )
 
-        if unload_model_after_running:
+        if unload_model_after_running and (not shared.cmd_opts.just_ui):
             interrogator.unload()
 
         return [
@@ -160,7 +191,24 @@ def on_interrogate(
                     print(f'skipping {path}')
                     continue
 
-            ratings, tags = interrogator.interrogate(image)
+            if not shared.cmd_opts.just_ui:
+                ratings, tags = interrogator.interrogate(image)
+            else:
+                req = {}
+                req["image"] = api.api.encode_pil_to_base64(image).decode('utf-8')
+                req["model"] = interrogator
+                req["threshold"] = threshold
+                url = '/'.join([shared.cmd_opts.server_path, 'tagger/v1/interrogate'])
+                try:
+                    result = requests.post(url, json=req)
+                except Exception as e:
+                    print(f'request server {url} failed with exception {e}', flush=True)
+                    tags = {}
+                if result.status_code!=200:
+                    print(f'request server {url} failed with exception {result.text}', flush=True)
+                    tags = {}
+                tags = json.loads(result.text)['caption']
+                ratings = {}
             processed_tags = Interrogator.postprocess_tags(
                 tags,
                 *postprocess_opts

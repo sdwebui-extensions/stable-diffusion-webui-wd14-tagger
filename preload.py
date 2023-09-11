@@ -1,9 +1,8 @@
 from pathlib import Path
 from argparse import ArgumentParser
+from modules.paths_internal import data_path
 
-from modules.shared import models_path
-
-default_ddp_path = Path(models_path, 'deepdanbooru')
+default_ddp_path = Path(f'{data_path}/models', 'deepdanbooru')
 
 
 def preload(parser: ArgumentParser):
