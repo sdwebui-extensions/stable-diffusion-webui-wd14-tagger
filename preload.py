@@ -1,8 +1,9 @@
 from pathlib import Path
 from argparse import ArgumentParser
-from modules.paths_internal import data_path
+from modules import cmd_args
 
-default_ddp_path = Path(f'{data_path}/models', 'deepdanbooru')
+cmd_opts, _ = cmd_args.parser.parse_known_args()
+default_ddp_path = Path(f'{cmd_opts.data_dir}/models', 'deepdanbooru')
 
 
 def preload(parser: ArgumentParser):
